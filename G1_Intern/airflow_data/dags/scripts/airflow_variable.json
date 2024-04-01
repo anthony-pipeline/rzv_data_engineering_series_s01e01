@@ -108,6 +108,14 @@
                     "products"
                 ],
                 "city_name": "New-York"
+            },
+            "shop_2_conn": {
+                "tables": [
+                    "customers",
+                    "orders",
+                    "products"
+                ],
+                "city_name": "Istanbul"
             }
         }
     }
