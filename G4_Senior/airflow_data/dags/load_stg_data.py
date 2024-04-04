@@ -73,7 +73,7 @@ def load_staging_data():
 
 
     @task()
-    def transform(filepath:str, table:str, conn_id:str, **context) -> str:
+    def transform(filepath:str, table:str, conn_id:str, **context) -> list[str]:
         """ Adds information about source (shop branch) and dag_run_id to identify what and when has loaded the data. Returns filepath. """
         
         df = pd.read_csv(filepath, sep=";", header=0, index_col=None, encoding="utf-8")
@@ -82,12 +82,33 @@ def load_staging_data():
         
         execution_date = context["dag_run"].execution_date
         dag_id = context["dag"].dag_id
-        filepath = get_filepath(dag_id, table, "transform", execution_date, "/tmp/airflow_staging", "csv", conn_id)
-        
-        df.to_csv(filepath, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
-        logging.info(f"Data is transformed [{df.shape[0]} rows]: SOURCE {conn_id} from {table} table in {filepath}")
 
-        return filepath
+        # Devide data into valid and invalid
+        check_list = CONFIG["tables"][table]["check_list"]
+        df_val = pd.DataFrame(columns=df.columns)
+        df_inval = pd.DataFrame(columns=df.columns)
+        for i, row in df.iterrows():
+            if i%3 != 0:
+                df_val.append(row)
+            else:
+                df_inval.append(row)
+
+        df_val.reset_index(drop=True, inplace=True)
+        df_inval.reset_index(drop=True, inplace=True)
+
+        # valid data
+        filepath_valid = get_filepath(dag_id, table + '_valid', "transform", execution_date, "/tmp/airflow_staging", "csv", conn_id)
+
+        df_val.to_csv(filepath, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
+        logging.info(f"Data is transformed [{df.shape[0]} valid rows]: SOURCE {conn_id} from {table} table in {filepath_valid}")
+
+        # invalid data
+        filepath_invalid = get_filepath(dag_id, table + '_invalid', "transform", execution_date, "/tmp/airflow_staging", "csv", conn_id)
+
+        df_inval.to_csv(filepath, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
+        logging.info(f"Data is transformed [{df.shape[0]} invalid rows]: SOURCE {conn_id} from {table} table in {filepath_invalid}")
+
+        return (filepath_valid, filepath_invalid)
 
 
     @task

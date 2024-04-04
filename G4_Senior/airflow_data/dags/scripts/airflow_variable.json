@@ -34,7 +34,10 @@
                 ],
                 "tech_load_column": {
                     "ingested_at": "timestamp"
-                }
+                },
+                "check_list": [
+
+                ]
             },
             "orders": {
                 "columns": {
@@ -66,7 +69,10 @@
                 ],
                 "tech_load_column": {
                     "ingested_at": "timestamp"
-                }
+                },
+                "check_list": [
+
+                ]
             },
             "products": {
                 "columns": {
@@ -97,7 +103,10 @@
                 ],
                 "tech_load_column": {
                     "ingested_at": "timestamp"
-                }
+                },
+                "check_list": [
+
+                ]
             }
         },
         "source_conn_ids": {

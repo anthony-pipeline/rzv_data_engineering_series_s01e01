@@ -25,8 +25,6 @@ services:
       - POSTGRES_DB=airflow
     ports:
       - "5432:5432"
-    networks:
-      - network-af
 
   af-init:
     build:
@@ -38,8 +36,7 @@ services:
     environment: *airflow_environment
     entrypoint: /bin/bash
     command: -c 'airflow db migrate && airflow users create --username airflow --password airflow --firstname airflow --lastname airflow --role Admin --email airflow@example.org'
-    networks:
-      - network-af
+
   
   af-webserver:
     build:
@@ -55,11 +52,6 @@ services:
       - "../airflow_data/logs:/opt/airflow/logs:rw"
     environment: *airflow_environment
     command: "webserver -p 8080"
-    networks:
-      - network-af
-      - network-1
-      - network-2
-      - network-dwh
 
   af-triggerer:
     build:
@@ -75,8 +67,7 @@ services:
       - "../airflow_data/plugins:/opt/airflow/plugins:rw"
     environment: *airflow_environment
     command: triggerer
-    networks:
-      - network-af
+
 
   af-scheduler:
     build:
@@ -92,11 +83,7 @@ services:
       - "../airflow_data/plugins:/opt/airflow/plugins:rw"
     environment: *airflow_environment
     command: scheduler
-    networks:
-      - network-af
-      - network-dwh
-      - network-1
-      - network-2
+
 
   pg-dwh:
     image: postgres:15-alpine
@@ -107,8 +94,7 @@ services:
       - "../dwh_data:/var/lib/postgresql/data:rw"
     ports:
       - 5435:5432
-    networks:
-      - network-dwh
+
 
   pgadmin:
     image: dpage/pgadmin4:8.2
@@ -119,11 +105,7 @@ services:
       - "../pgadmin_data:/var/lib/pgadmin:rw"
     ports:
       - "80:80"
-    networks:
-      - network-af
-      - network-dwh
-      - network-1
-      - network-2
+
 
   pg-shop-1:
     image: postgres:15-alpine
@@ -132,8 +114,7 @@ services:
       - ./env/shop-1.env
     ports:
       - 5433:5432
-    networks:
-      - network-1
+
 
   shop-1:
     build:
@@ -144,8 +125,6 @@ services:
       - ./env/shop-1.env
     volumes:
       - "../generator_app_data/logs/shop-1:/app/logs:rw"
-    networks:
-      - network-1
     depends_on:
       - pg-shop-1
       
@@ -156,8 +135,6 @@ services:
       - ./env/shop-2.env
     ports:
       - 5434:5432
-    networks:
-      - network-2
 
   shop-2:
     build:
@@ -168,17 +145,5 @@ services:
       - ./env/shop-2.env
     volumes:
       - "../generator_app_data/logs/shop-2:/app/logs:rw"
-    networks:
-      - network-2
     depends_on:
       - pg-shop-2
-
-networks: 
-  network-1:  
-    name: network-1
-  network-2:  
-    name: network-2
-  network-dwh:
-    name: network-dwh
-  network-af:
-    name: network-af

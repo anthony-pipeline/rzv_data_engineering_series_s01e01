@@ -12,7 +12,7 @@ from airflow.providers.postgres.operators.postgres import PostgresOperator
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
-from utils import CONFIG, TARGET_CONN_ID, TARGET_HOOK, check_if_need_to_skip, get_ddl_from_conf, hash_nonpk_cols_sha1_df, get_filepath
+from utils import CONFIG, TARGET_CONN_ID, TARGET_HOOK, check_if_need_to_skip, get_ddl_from_conf, hash_nonpk_cols_sha1_df, get_filepath, validate_credit_card
 
 logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -100,9 +100,10 @@ def load_oda_data():
 
     @task()
     def transform(filepath, table, **context) -> list[str]:
-        """ Prepares datasets to load. Returns list of filepaths. [0]th path is for insert, [1]st is for update. """    
-        
-        df = pd.read_csv(filepath, sep=';', header=0, index_col=None, encoding="utf-8")
+        """ Prepares datasets to load. Returns list of filepaths. [0]th path is for insert, [1]st is for update, [2]nd is for invalid data """
+
+        df= pd.read_csv(filepath, sep=';', header=0, index_col=None, encoding="utf-8")
+
         df["dag_run_id"] = context["dag_run"].run_id
         scd2_columns = [pair for pair in CONFIG["tables"][table]["load_params"]["scd2_columns"].items()]
         

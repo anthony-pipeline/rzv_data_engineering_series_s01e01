@@ -116,3 +116,21 @@ def get_filepath(dag_id:str, table:str, etl_stage:str, execution_date:str, abs_p
     output_dir.mkdir(parents=True, exist_ok=True)
     
     return str(Path(output_dir / output_file))
+
+
+def prepare_tables_for_dlq():
+    pass
+
+def validate_credit_card(cc_num: int) -> bool:
+    if len(str(cc_num)) != 16:
+        return False
+    return True
+
+def validate_phone_num(phone_num: str) -> bool:
+    if len(phone_num) != 10:
+        return False
+    if phone_num[0] != '9':
+        return False
+    if phone_num in ['9000000000', '9123456789']:
+        return False
+    return True
