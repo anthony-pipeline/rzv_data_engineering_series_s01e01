@@ -95,7 +95,7 @@ def load_oda_data():
         df.to_csv(filepath, sep=';', header=True, index=False, mode="w", encoding="utf-8", errors="strict")
         logging.info(f"Data is extracted [{df.shape[0]} rows]: from stg.{table} table and saved to {filepath}.")
         
-        return str(filepath)
+        return filepath
 
 
     @task()

@@ -76,6 +76,8 @@ services:
       dockerfile: Dockerfile
     restart: always
     container_name: af-scheduler
+    cpus: 4
+    mem_limit: 4g
     depends_on:
       - pg-airflow
     volumes:

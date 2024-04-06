@@ -1,4 +1,5 @@
 """ This dag loads incremental data from sources to the staging layer of DWH. """
+from typing import Tuple
 
 import pandas as pd
 import logging
@@ -15,17 +16,17 @@ from pathlib import Path
 
 from psycopg2.errors import UndefinedTable
 from utils import CONFIG, TARGET_CONN_ID, TARGET_HOOK, \
-    check_if_need_to_skip, get_ddl_from_conf, get_filepath, get_columns
+    check_if_need_to_skip, get_ddl_from_conf, get_filepath, get_columns, validate_row
 
 
 default_args = {
     "owner": "rzv_de",
     "depends_on_past": False,
     "start_date": datetime(2024, 1, 19, 12, 0, 0, tzinfo=pendulum.timezone("UTC")),
-    "retries": 3,
+    "retries": 1,
     "retry_delay": timedelta(seconds=10),
     "catchup": False,
-    "tags": ["rzv_de", "stg"],
+    "tags": ["rzv_de", "stg"]
 }
 
 @dag(default_args=default_args, description="ETL pipeline to load staging data from multiple sources", schedule_interval="*/3 * * * *", catchup=False)
@@ -39,6 +40,13 @@ def load_staging_data():
             sql = get_ddl_from_conf(table, "stg")
             print(sql, get_columns(table, "stg"))
             if sql: TARGET_HOOK.run(sql)
+
+        for table in CONFIG["tables"]:
+            sql = get_ddl_from_conf(table, "dlq")
+            print(sql, get_columns(table, "dlq"))
+            if sql: TARGET_HOOK.run(sql)
+
+
     
     
     @task()
@@ -85,36 +93,44 @@ def load_staging_data():
 
         # Devide data into valid and invalid
         check_list = CONFIG["tables"][table]["check_list"]
-        df_val = pd.DataFrame(columns=df.columns)
-        df_inval = pd.DataFrame(columns=df.columns)
-        for i, row in df.iterrows():
-            if i%3 != 0:
-                df_val.append(row)
-            else:
-                df_inval.append(row)
+        valid_rows = []
+        invalid_rows = []
 
-        df_val.reset_index(drop=True, inplace=True)
-        df_inval.reset_index(drop=True, inplace=True)
+        # Do all the checks for each row
+        for i, row in df.iterrows():
+            f = True
+            for check_code in check_list:
+                if not validate_row(check_code, row):
+                    f = False
+
+            if f:
+                valid_rows.append(row)
+            else:
+                invalid_rows.append(row)
+
+        df_val = pd.DataFrame(valid_rows, columns = df.columns).reset_index(drop=True)
+        df_inval = pd.DataFrame(invalid_rows, columns=df.columns).reset_index(drop=True)
 
         # valid data
-        filepath_valid = get_filepath(dag_id, table + '_valid', "transform", execution_date, "/tmp/airflow_staging", "csv", conn_id)
+        filepath_valid = get_filepath(dag_id, table, "transform_valid", execution_date, "/tmp/airflow_staging", "csv", conn_id)
 
-        df_val.to_csv(filepath, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
+        df_val.to_csv(filepath_valid, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
         logging.info(f"Data is transformed [{df.shape[0]} valid rows]: SOURCE {conn_id} from {table} table in {filepath_valid}")
 
         # invalid data
-        filepath_invalid = get_filepath(dag_id, table + '_invalid', "transform", execution_date, "/tmp/airflow_staging", "csv", conn_id)
+        filepath_invalid = get_filepath(dag_id, table, "transform_invalid", execution_date, "/tmp/airflow_staging", "csv", conn_id)
 
-        df_inval.to_csv(filepath, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
+        df_inval.to_csv(filepath_invalid, sep=";", header=True, index=False, mode="w", encoding="utf-8", errors="strict")
         logging.info(f"Data is transformed [{df.shape[0]} invalid rows]: SOURCE {conn_id} from {table} table in {filepath_invalid}")
 
-        return (filepath_valid, filepath_invalid)
+        return [filepath_valid, filepath_invalid]
 
 
     @task
-    def load(filepath:str, table:str, conn_id:str):
+    def load(filepaths: list[str], table:str, conn_id:str):
         """ Loads data to the staging layer of DWH. """
-        
+
+        filepath = filepaths[0]
         df = pd.read_csv(filepath, sep=";", header=0, index_col=None, encoding="utf-8")
         
         tech_load_column = [pair for pair in CONFIG["tables"][table]["tech_load_column"].items()][0]
@@ -127,6 +143,26 @@ def load_staging_data():
             if_exists="append",
             index=False)
         logging.info(f"Data is loaded [{df.shape[0]} rows]: SOURCE {conn_id} into stg.{table} table from {filepath}")
+
+
+    @task
+    def load2(filepaths: list[str], table:str, conn_id:str):
+        """ Loads data to the staging layer of DWH. """
+
+        filepath = filepaths[1]
+        df = pd.read_csv(filepath, sep=";", header=0, index_col=None, encoding="utf-8")
+
+        tech_load_column = [pair for pair in CONFIG["tables"][table]["tech_load_column"].items()][0]
+        df[tech_load_column[0]] = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
+        df.to_sql(table,
+            TARGET_HOOK.get_sqlalchemy_engine(),
+            schema="dlq",
+            chunksize=1000,
+            if_exists="append",
+            index=False)
+        logging.info(f"Data is loaded [{df.shape[0]} rows]: SOURCE {conn_id} into dlq.{table} table from {filepath}")
+
         
 
     start_task = ShortCircuitOperator(
@@ -134,10 +170,16 @@ def load_staging_data():
         python_callable=check_if_need_to_skip
     )
      
-    prepare_schema_task = PostgresOperator(
-        task_id="prepare_schema",
+    prepare_schema_task_stg = PostgresOperator(
+        task_id="prepare_schema_stg",
         postgres_conn_id=TARGET_CONN_ID,
         sql="""create schema if not exists stg;"""
+    )
+
+    prepare_schema_task_dlq = PostgresOperator(
+        task_id="prepare_schema_dlq",
+        postgres_conn_id=TARGET_CONN_ID,
+        sql="""create schema if not exists dlq;"""
     )
     
     end_task = EmptyOperator(task_id="dummy_end")
@@ -163,10 +205,13 @@ def load_staging_data():
                 def etl_tg():
                     filepath_e = extract(table, conn_id)
                     filepath_t = transform(filepath_e, table, conn_id)
-                    load(filepath_t, table, conn_id)
+                    load_task = load(filepath_t, table, conn_id)
+                    load_task_2 = load2(filepath_t, table, conn_id)
+
+                    filepath_e >> filepath_t >> [load_task, load_task_2]
 
                 inner_start_task >> etl_tg() >> inner_end_task
 
-        start_task >> prepare_schema_task >> prepare_tables_task >> conn_tg() >> end_task >> trigger_load_oda_data
+        start_task >> [prepare_schema_task_stg, prepare_schema_task_dlq] >> prepare_tables_task >> conn_tg() >> end_task >> trigger_load_oda_data
 
 dag = load_staging_data()

@@ -118,15 +118,14 @@ def get_filepath(dag_id:str, table:str, etl_stage:str, execution_date:str, abs_p
     return str(Path(output_dir / output_file))
 
 
-def prepare_tables_for_dlq():
-    pass
-
-def validate_credit_card(cc_num: int) -> bool:
+def validate_credit_card(row) -> bool:
+    cc_num = row['credit_card']
     if len(str(cc_num)) != 16:
         return False
     return True
 
-def validate_phone_num(phone_num: str) -> bool:
+def validate_phone_num(row) -> bool:
+    phone_num = row['phone_number']
     if len(phone_num) != 10:
         return False
     if phone_num[0] != '9':
@@ -134,3 +133,22 @@ def validate_phone_num(phone_num: str) -> bool:
     if phone_num in ['9000000000', '9123456789']:
         return False
     return True
+
+
+def validate_currency(row) -> bool:
+    except_list = ['PHP', 'TVD']
+    if row['currency'] in except_list:
+        return False
+    return True
+
+check_codes = {
+    "cc_num": validate_credit_card,
+    "phone_num": validate_phone_num,
+    "cur": validate_currency
+}
+
+def validate_row(check_code, row) -> bool:
+    if check_code in check_codes:
+        return check_codes[check_code](row)
+    else:
+        return True
