@@ -36,6 +36,11 @@ def get_columns(table:str, schema:str) -> list[str]:
             
             if is_scd2:
                 columns.extend([f"{scd2_columns[0][0]} {scd2_columns[0][1]}", f"{scd2_columns[1][0]} {scd2_columns[1][1]}"])
+
+
+        if schema == 'dlq':
+            columns.append('reject_reasons varchar')
+
         logging.debug(f"columns are: {columns}")
         
         return columns

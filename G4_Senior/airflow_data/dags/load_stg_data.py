@@ -99,17 +99,19 @@ def load_staging_data():
         # Do all the checks for each row
         for i, row in df.iterrows():
             f = True
+            reject_reason = []
             for check_code in check_list:
                 if not validate_row(check_code, row):
                     f = False
+                    reject_reason.append(check_code)
 
             if f:
-                valid_rows.append(row)
+                valid_rows.append(row.tolist())
             else:
-                invalid_rows.append(row)
+                invalid_rows.append(row.tolist() + ['; '.join(reject_reason)])
 
         df_val = pd.DataFrame(valid_rows, columns = df.columns).reset_index(drop=True)
-        df_inval = pd.DataFrame(invalid_rows, columns=df.columns).reset_index(drop=True)
+        df_inval = pd.DataFrame(invalid_rows, columns=df.columns.tolist()+['reject_reasons']).reset_index(drop=True)
 
         # valid data
         filepath_valid = get_filepath(dag_id, table, "transform_valid", execution_date, "/tmp/airflow_staging", "csv", conn_id)
@@ -163,6 +165,23 @@ def load_staging_data():
             index=False)
         logging.info(f"Data is loaded [{df.shape[0]} rows]: SOURCE {conn_id} into dlq.{table} table from {filepath}")
 
+
+    @task
+    def transform2(table: str):
+        """ Remove duplicate rows from DLQ tables """
+        sql = f"""select * from dlq.{table};"""
+        df = TARGET_HOOK.get_pandas_df(sql)
+
+        df = df.drop_duplicates(subset=['created_at', 'src_id', 'reject_reasons'])
+
+        df.to_sql(table,
+            TARGET_HOOK.get_sqlalchemy_engine(),
+            schema="dlq",
+            chunksize=1000,
+            if_exists="replace",
+            index=False)
+        logging.info(f"Removed duplicates from dlq.{table} table. Now [{df.shape[0]} rows]")
+
         
 
     start_task = ShortCircuitOperator(
@@ -207,8 +226,9 @@ def load_staging_data():
                     filepath_t = transform(filepath_e, table, conn_id)
                     load_task = load(filepath_t, table, conn_id)
                     load_task_2 = load2(filepath_t, table, conn_id)
+                    delete_dups = transform2(table)
 
-                    filepath_e >> filepath_t >> [load_task, load_task_2]
+                    filepath_e >> filepath_t >> [load_task, load_task_2] >> delete_dups
 
                 inner_start_task >> etl_tg() >> inner_end_task
 

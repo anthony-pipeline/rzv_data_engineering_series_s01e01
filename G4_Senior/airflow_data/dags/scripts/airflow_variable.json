@@ -36,7 +36,8 @@
                     "ingested_at": "timestamp"
                 },
                 "check_list": [
-                    "cc_num"
+                    "cc_num",
+                    "phone_num"
                 ]
             },
             "orders": {
@@ -71,7 +72,7 @@
                     "ingested_at": "timestamp"
                 },
                 "check_list": [
-                     "validate_credit_card"
+
                 ]
             },
             "products": {
