@@ -15,8 +15,8 @@
                 "credit_card_expire": {"type": "varchar", "faker": "credit_card_expire"}
             },
             "params": {
-                "insert_rows_per_tick": 10,
-                "update_rows_per_tick": 2                
+                "insert_rows_per_tick": 100,
+                "update_rows_per_tick": 20
         }
     },
         "orders": {
@@ -28,8 +28,8 @@
                 "quantity": {"type": "float", "faker": "random_int", "params": {"min": 1, "max": 100}}
             },
             "params": {
-                "insert_rows_per_tick": 100,
-                "update_rows_per_tick": 7
+                "insert_rows_per_tick": 1000,
+                "update_rows_per_tick": 70
             }
     },
         "products": {
@@ -40,8 +40,8 @@
                 "currency": {"type": "varchar", "faker": "currency_code"}
             },
             "params": {
-                "insert_rows_per_tick": 10,
-                "update_rows_per_tick": 3
+                "insert_rows_per_tick": 100,
+                "update_rows_per_tick": 30
         }
     }
     }
